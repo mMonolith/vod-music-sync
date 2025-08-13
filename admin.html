@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>VOD Sync Admin v4.1</title>
+    <style>
+        :root {
+            --twitch-purple: #9147ff;
+            --twitch-purple-hover: #772ce8;
+        }
+        body { font-family: sans-serif; padding: 20px; max-width: 1000px; margin: auto; background-color: #f4f4f4; }
+        h1, h2 { color: #333; }
+        .container { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; font-size: 1em; }
+        button { color: white; cursor: pointer; border: none; font-weight: bold; transition: background-color 0.2s; }
+        
+        .btn-primary { background-color: var(--twitch-purple); }
+        .btn-primary:hover { background-color: var(--twitch-purple-hover); }
+        .btn-delete { background-color: #dc3545; }
+        .btn-delete:hover { background-color: #c82333; }
+        .btn-edit { background-color: #ffc107; color: black; }
+        .btn-edit:hover { background-color: #e0a800; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+
+        #logUrl { background-color: #eee; }
+        #status, #list-status { margin-top: 15px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-break: break-word; }
+        th { background-color: #f2f2f2; }
+        .actions-cell { width: 150px; text-align: center; }
+        .actions-cell button { width: auto; display: inline-block; padding: 8px 12px; margin: 2px;}
+    </style>
+</head>
+<body>
+    <h1>VOD Sync Admin Dashboard</h1>
+
+    <div class="container">
+        <h2 id="form-title">Upload & Link New VOD Log</h2>
+        <form id="vodForm">
+            <input type="hidden" id="originalKey" value="">
+            <label for="workerUrl">Worker URL</label>
+            <input type="text" id="workerUrl" value="https://vod-sync.officilly-ranging-gamer.workers.dev" required>
+            <label for="vodName">VOD Name (Optional, e.g., "Lethal Company Shenanigans")</label>
+            <input type="text" id="vodName" placeholder="A descriptive name for this VOD">
+            
+            <label for="logFile" id="logFileLabel">1. Select Merged VOD Log File (.json)</label>
+            <input type="file" id="logFile" accept=".json" required>
+            
+            <label for="twitchId">2. Enter VOD IDs</label>
+            <input type="text" id="twitchId" placeholder="Twitch VOD ID (e.g., 123456789)">
+            <input type="text" id="youtubeId" placeholder="YouTube VOD ID (e.g., dQw4w9WgXcQ)">
+            
+            <label for="logUrl">3. Log URL (auto-filled on upload, or paste existing)</label>
+            <input type="url" id="logUrl" required>
+            
+            <label for="secret">4. Admin Secret</label>
+            <input type="password" id="secret" required>
+            <button type="submit" class="btn-primary">Submit / Update Link</button>
+            <button type="button" id="clear-form-btn" class="btn-secondary">Clear Form / New Entry</button>
+        </form>
+        <p id="status"></p>
+    </div>
+
+    <div class="container">
+        <h2>Manage Existing VODs</h2>
+        <label for="listSecret">Admin Secret</label>
+        <input type="password" id="listSecret" placeholder="Enter secret to view and manage VODs">
+        <button id="fetchVodsBtn" class="btn-primary">Fetch VOD List</button>
+        <div id="vodListContainer"><p id="list-status">Enter secret and click fetch.</p></div>
+    </div>
+
+<script>
+    const workerUrlInput = document.getElementById('workerUrl');
+    const statusEl = document.getElementById('status');
+    const listSecretInput = document.getElementById('listSecret');
+    const vodForm = document.getElementById('vodForm');
+    const formTitle = document.getElementById('form-title');
+    const logFileLabel = document.getElementById('logFileLabel');
+    const logFileInput = document.getElementById('logFile');
+    const originalKeyInput = document.getElementById('originalKey');
+
+    vodForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        statusEl.textContent = 'Submitting...';
+        const workerUrl = workerUrlInput.value.trim();
+        const logFile = logFileInput.files[0];
+        let logUrl = document.getElementById('logUrl').value.trim();
+        const secret = document.getElementById('secret').value;
+        const vodName = document.getElementById('vodName').value.trim();
+        const twitchId = document.getElementById('twitchId').value.trim();
+        const youtubeId = document.getElementById('youtubeId').value.trim();
+        const originalKey = originalKeyInput.value;
+
+        try {
+            if (logFile) {
+                statusEl.textContent = 'Uploading log file...';
+                const fileContent = await logFile.text();
+                const uploadRes = await fetch(new URL('/upload', workerUrl).href, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret }, body: fileContent
+                });
+                if (!uploadRes.ok) throw new Error(`Upload failed: ${await uploadRes.text()}`);
+                const { logId } = await uploadRes.json();
+                logUrl = new URL(`/logs/${logId}`, workerUrl).href;
+                document.getElementById('logUrl').value = logUrl;
+            }
+
+            if (!logUrl) throw new Error("Log URL is required. Either upload a file or paste an existing URL.");
+            if (!twitchId && !youtubeId) throw new Error("At least one VOD ID is required.");
+            
+            statusEl.textContent = 'Linking VODs...';
+
+            const newKey = twitchId ? `twitch:${twitchId}` : `youtube:${youtubeId}`;
+            if (originalKey && originalKey !== newKey) {
+                await fetch(new URL('/delete', workerUrl).href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+                    body: JSON.stringify({ keysToDelete: [originalKey] })
+                });
+            }
+
+            const submitRes = await fetch(new URL('/submit', workerUrl).href, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+                body: JSON.stringify({ twitchId, youtubeId, logUrl, vodName })
+            });
+            if (!submitRes.ok) throw new Error(`Linking failed: ${await submitRes.text()}`);
+            
+            statusEl.textContent = `Success! VOD link saved. Refreshing list...`;
+            fetchVodList();
+            clearForm();
+        } catch (error) { statusEl.textContent = `Error: ${error.message}`; }
+    });
+
+    document.getElementById('clear-form-btn').addEventListener('click', clearForm);
+    function clearForm() {
+        vodForm.reset();
+        formTitle.textContent = "Upload & Link New VOD Log";
+        logFileLabel.textContent = "1. Select Merged VOD Log File (.json)";
+        logFileInput.required = true;
+        originalKeyInput.value = "";
+        statusEl.textContent = "";
+    }
+
+    document.getElementById('fetchVodsBtn').addEventListener('click', fetchVodList);
+    
+    async function fetchVodList() {
+        const workerUrl = workerUrlInput.value.trim();
+        const secret = listSecretInput.value;
+        const container = document.getElementById('vodListContainer');
+        container.innerHTML = '<p id="list-status">Loading...</p>';
+        try {
+            const res = await fetch(new URL('/list', workerUrl).href, { headers: { 'X-Admin-Secret': secret } });
+            if (!res.ok) throw new Error(`Failed to fetch: ${res.statusText}`);
+            const vods = await res.json();
+            renderVodTable(vods);
+        } catch (error) { container.innerHTML = `<p id="list-status" style="color: red;">Error: ${error.message}</p>`; }
+    }
+
+    function renderVodTable(vods) {
+        const container = document.getElementById('vodListContainer');
+        if (!vods || vods.length === 0) {
+            container.innerHTML = '<p id="list-status">No VODs found.</p>';
+            return;
+        }
+        let tableHTML = `<table><thead><tr><th>VOD Name</th><th>VOD Key</th><th>Log URL</th><th class="actions-cell">Actions</th></tr></thead><tbody>`;
+        vods.sort((a,b) => (a.key || '').localeCompare(b.key || '')).forEach(vod => {
+            tableHTML += `<tr data-vod='${JSON.stringify(vod)}'>
+                    <td>${vod.vodName || '<i>(No Name)</i>'}</td>
+                    <td>${vod.key}</td>
+                    <td>${vod.logUrl || 'N/A'}</td>
+                    <td class="actions-cell">
+                        <button class="btn-edit">Edit</button>
+                        <button class="btn-delete">Delete</button>
+                    </td></tr>`;
+        });
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+        container.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+        container.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', handleEditClick));
+    }
+
+    async function handleDeleteClick(event) {
+        const row = event.target.closest('tr');
+        const keyToDelete = JSON.parse(row.dataset.vod).key;
+        if (!confirm(`Are you sure you want to delete the link for "${keyToDelete}"? This cannot be undone.`)) return;
+        const workerUrl = workerUrlInput.value.trim();
+        const secret = listSecretInput.value;
+        try {
+            const res = await fetch(new URL('/delete', workerUrl).href, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+                body: JSON.stringify({ keysToDelete: [keyToDelete] })
+            });
+            if (!res.ok) throw new Error(`Delete failed: ${await res.text()}`);
+            fetchVodList();
+        } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    function handleEditClick(event) {
+        const row = event.target.closest('tr');
+        const vodData = JSON.parse(row.dataset.vod);
+        
+        formTitle.textContent = `Editing: ${vodData.vodName || vodData.key}`;
+        originalKeyInput.value = vodData.key;
+        document.getElementById('vodName').value = vodData.vodName || '';
+        document.getElementById('logUrl').value = vodData.logUrl || '';
+        
+        const [platform, id] = vodData.key.split(':');
+        document.getElementById('twitchId').value = platform === 'twitch' ? id : '';
+        document.getElementById('youtubeId').value = platform === 'youtube' ? id : '';
+        
+        logFileLabel.textContent = "1. To use a different log, select a new file (Optional)";
+        logFileInput.required = false;
+        
+        window.scrollTo(0, 0);
+        document.getElementById('vodName').focus();
+    }
+</script>
+</body>
+</html>

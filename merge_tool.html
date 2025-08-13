@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VOD Sync Merge Tool v2.1</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f0f0; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { max-width: 800px; text-align: center; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        #drop-zone { border: 2px dashed #ccc; border-radius: 8px; padding: 60px; margin-bottom: 20px; transition: background-color 0.2s; }
+        #drop-zone.dragover { background-color: #e0e0e0; }
+        button { background-color: #007bff; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #file-list { margin-top: 20px; text-align: left; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VOD Music Log Merge Tool (v2.1)</h1>
+        <p>Correctly merges logs from multiple sessions (e.g., after a crash).</p>
+        <div id="drop-zone">Drag & Drop valid .json log files here, or click to select.</div>
+        <input type="file" id="file-input" multiple accept=".json" style="display: none;">
+        <div id="file-list"></div>
+        <button id="download-btn" disabled>Download Merged Log File</button>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const downloadBtn = document.getElementById('download-btn');
+        let filesToProcess = [];
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+        function handleFiles(files) {
+            filesToProcess = Array.from(files);
+            fileList.innerHTML = '<strong>Files to merge:</strong><ul>' + filesToProcess.map(f => `<li>${f.name}</li>`).join('') + '</ul>';
+            downloadBtn.disabled = filesToProcess.length === 0;
+        }
+
+        function parseTimestamp(ts) {
+            const [h, m, s] = ts.split(':').map(Number);
+            return (h * 3600) + (m * 60) + s;
+        }
+
+        function formatTimestamp(totalSeconds) {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = Math.floor(totalSeconds % 60);
+            return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+        }
+
+        downloadBtn.addEventListener('click', async () => {
+            if (filesToProcess.length === 0) return;
+
+            const fileContents = await Promise.all(
+                filesToProcess.map(file => file.text().then(JSON.parse).catch(() => null))
+            );
+
+            const validLogs = fileContents.filter(log => log && log.metadata && log.metadata.start_time_utc);
+            
+            if (validLogs.length === 0) {
+                fileList.innerHTML = '<p class="error">No valid log files selected. Ensure files have a metadata object with a start_time_utc.</p>';
+                return;
+            }
+
+            validLogs.sort((a, b) => new Date(a.metadata.start_time_utc) - new Date(b.metadata.start_time_utc));
+
+            const finalLog = {
+                metadata: validLogs[0].metadata,
+                log: []
+            };
+
+            let totalOffsetSeconds = 0;
+            let lastFileEndTime = 0;
+
+            validLogs.forEach((currentLog, index) => {
+                if (index > 0) {
+                    const previousLog = validLogs[index - 1];
+                    const lastEventOfPrevious = previousLog.log[previousLog.log.length - 1];
+                    const previousLogDuration = parseTimestamp(lastEventOfPrevious.timestamp);
+                    
+                    const timeGapMs = new Date(currentLog.metadata.start_time_utc) - new Date(previousLog.metadata.start_time_utc);
+            
+                    totalOffsetSeconds = (timeGapMs / 1000);
+                }
+                
+                currentLog.log.forEach(event => {
+                    if (event.event !== "START") {
+                        const originalEventTime = parseTimestamp(event.timestamp);
+                        const newEvent = {
+                            ...event,
+                            timestamp: formatTimestamp(originalEventTime + totalOffsetSeconds)
+                        };
+                        finalLog.log.push(newEvent);
+                    }
+                });
+            });
+            
+            finalLog.log.unshift({ event: "START", timestamp: "00:00:00" });
+
+            const finalJson = JSON.stringify(finalLog, null, 4);
+            const blob = new Blob([finalJson], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date(finalLog.metadata.start_time_utc);
+            const filename = `MERGED_Log_${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()}.json`;
+            
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
