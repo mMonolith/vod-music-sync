@@ -1,14 +1,17 @@
 local obs = obslua
 
-local status_file_path = ""
-function script_description() return "v0.11.0: Adds start position to PLAY events." end
+local temp_path = os.getenv("TEMP")
+local status_file_path = temp_path .. "\\vod_sync_data.json"
+
+function script_description() return "v0.12.0: Finds the spotify watcher file automatically" end
+
 function script_properties()
     local p = obs.obs_properties_create()
-    obs.obs_properties_add_path(p, "status_file_path", "Path to spotify_watcher's status file", obs.OBS_PATH_FILE, "JSON files (*.json)", nil)
-    obs.obs_properties_add_text(p, "instructions", "Instructions:\n1. Run spotify_watcher.exe.\n2. Set path above.", obs.OBS_TEXT_INFO)
+    obs.obs_properties_add_text(p, "instructions", "Instructions:\n1. Run spotify_watcher.exe.\n2. Go live or start recording.", obs.OBS_TEXT_INFO)
     return p
 end
-function script_update(s) status_file_path = obs.obs_data_get_string(s, "status_file_path") end
+
+function script_update(s) end
 
 local function parse_kv(content, key)
     local key_pattern = '"' .. key .. '": ?'
@@ -42,9 +45,9 @@ local recording_active = false
 local script_dir = script_path():match("(.*/)")
 local log_dir = script_dir .. "vod_music_logs/"
 
-local function log(message) obs.script_log(obs.LOG_INFO, "[VOD-Sync-v11.0] " .. tostring(message)) end
-local function format_timestamp(ms) local s = math.floor(ms/1000); return string.format("%02d:%02d:%02d", math.floor(s/3600), math.floor(s/60)%60, s%60) end
-local function escape_str(s) if not s or s == "none" then return "" end; return s:gsub('"', '\\"'):gsub('\\', '\\\\') end
+local function log(message) obs.script_log(obs.LOG_INFO, "[VOD-Sync-v12.0] " .. tostring(message)) end
+local function format_timestamp(ms) local s = math.floor( ms/1000 ); return string.format("%02d:%02d:%02d", math.floor(s/3600), math.floor(s/60)%60, s%60) end
+local function escape_str(s) if not s or s == "none" then return "" end; return s:gsub('"', '\"'):gsub('\\', '\\\\') end
 
 function write_event(event, data)
     if not final_log_file then return end
@@ -59,7 +62,7 @@ function write_event(event, data)
     end
     local timestamp_ms = obs.obs_output_get_total_frames(output) * 1000 / obs.obs_get_active_fps()
     obs.obs_output_release(output)
-
+    
     local entry_data = ""
     if event == "PLAY" and data and data.title and data.title ~= "none" then
         entry_data = ',\n        "position_ms": ' .. tostring(data.progress_ms or 0) .. ',\n        "track": {\n            "title": "' .. escape_str(data.title) .. '",\n            "artist": "' .. escape_str(data.artist) .. '",\n            "duration_ms": ' .. tostring(data.duration_ms or 0) .. '\n        }'
@@ -73,23 +76,23 @@ function write_event(event, data)
 end
 
 function script_tick(seconds)
-    if not recording_active or status_file_path == "" then return end
+    if not recording_active then return end
     local now = os.clock() * 1000
     if now < last_poll_time + poll_rate_ms then return end
     last_poll_time = now
-
+    
     local file = io.open(status_file_path, "r")
     if not file then return end
     local content = file:read("*a")
     file:close()
     if content == "" then return end
-
+    
     local track_id = parse_kv(content, "track_id")
     local is_playing = parse_kv(content, "is_playing")
     local progress_ms = parse_kv(content, "progress_ms")
-
+    
     if track_id == nil or is_playing == nil or progress_ms == nil then return end
-
+    
     if track_id ~= last_track_id then
         log("New Track: " .. track_id)
         local data = { 
@@ -124,7 +127,14 @@ end
 function on_event(event)
     if event == obs.OBS_FRONTEND_EVENT_RECORDING_STARTED or event == obs.OBS_FRONTEND_EVENT_STREAMING_STARTED then
         if recording_active then return end
-        if status_file_path == "" then log("ERROR: Path not set!"); return end
+        
+        local check_file = io.open(status_file_path, "r")
+        if not check_file then
+            log("ERROR: Could not find vod_sync_data.json in AppData/Local/Temp. Is spotify_watcher.exe running?")
+            return
+        end
+        check_file:close()
+
         recording_active = true
         log("Recording started.")
         os.execute('mkdir "' .. log_dir .. '"')
