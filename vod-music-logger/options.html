@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VOD Sync Options</title>
+    <style>body{font-family:sans-serif;padding:20px;max-width:500px;margin:auto;}hr{margin:20px 0;} .setting { margin-top: 15px; }</style>
+</head>
+<body>
+    <h1>VOD Sync Options</h1>
+    <h3>1. Choose Your Music Provider</h3>
+    <input type="radio" id="provider-spotify" name="music-provider" value="spotify">
+    <label for="provider-spotify">Spotify <strong>(Premium Required, Fully Automatic)</strong></label><br>
+    <input type="radio" id="provider-youtube" name="music-provider" value="youtube">
+    <label for="provider-youtube">YouTube <strong>(User-Assisted)</strong></label>
+
+    <div id="youtube-settings" style="display: none;">
+        <h4>YouTube Settings</h4>
+        <div class="setting">
+            <input type="checkbox" id="pause-vod-toggle">
+            <label for="pause-vod-toggle">Pause VOD when opening a new song tab</label>
+        </div>
+        <div class="setting">
+            <input type="checkbox" id="show-popup-toggle">
+            <label for="show-popup-toggle">Show in-page song notifications</label>
+        </div>
+    </div>
+
+    <hr>
+    <h3>2. Login to Selected Provider</h3>
+    <div id="spotify-login-section">
+        <p>This extension requires you to connect your Spotify account for playback control.</p>
+        <button id="login-button">Login with Spotify</button>
+        <p id="spotify-status">Status: Not logged in.</p>
+    </div>
+    <div id="youtube-login-section">
+        <p>YouTube is selected. No separate login required.</p>
+    </div>
+    <script src="options.js"></script>
+</body>
+</html>

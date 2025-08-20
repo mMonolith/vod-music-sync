@@ -1,0 +1,43 @@
+{
+    "manifest_version": 3,
+    "name": "VOD Music Sync",
+    "version": "10.0",
+    "description": "Syncs music with muted Twitch/YouTube VODs. Spotify Premium recommended.",
+    "permissions": [
+        "storage",
+        "scripting",
+        "tabs",
+        "identity",
+        "alarms"
+    ],
+    "host_permissions": [
+        "*://*.twitch.tv/*",
+        "*://*.youtube.com/*",
+        "*://*.googleapis.com/*",
+        "https://accounts.spotify.com/*",
+        "*://api.spotify.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*.twitch.tv/videos/*",
+                "*://*.youtube.com/watch*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "VOD Music Sync"
+    },
+    "options_page": "options.html",
+    "icons": {
+        "48": "icons/icon48.png"
+    }
+}

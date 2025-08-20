@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VOD Sync Control</title>
+    <style>
+        body { width: 300px; font-family: sans-serif; text-align: center; padding: 10px; }
+        h3 { margin-top: 0; }
+        button { width: 100%; padding: 10px; cursor: pointer; font-size: 14px; margin-top: 10px; border-radius: 4px; border: 1px solid transparent; }
+        .toggle-container { display: flex; align-items: center; justify-content: space-between; padding: 8px; background-color: #f0f0f0; border-radius: 6px; }
+        .toggle-container label { font-size: 14px; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #9147ff; }
+        input:checked + .slider:before { transform: translateX(16px); }
+        hr { border: 0; border-top: 1px solid #ddd; margin: 15px 0; }
+        #current-song-container {
+            text-align: left; background-color: #f9f9f9; padding: 10px;
+            border-radius: 6px; border: 1px solid #eee;
+        }
+        #current-song-container p { margin: 0; }
+        #song-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #song-artist { font-size: 0.9em; color: #555; margin-bottom: 10px; }
+        #reopen-btn { background-color: #9147ff; color: white; font-weight: bold; }
+        #history-btn { background-color: #e0e0e0; color: #333; }
+        #song-history-container {
+            display: none;
+            max-height: 220px;
+            overflow-y: auto;
+            text-align: left;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            margin-top: 10px;
+            padding: 5px;
+        }
+        .history-item {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-item p { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-item .title { font-weight: bold; }
+        .history-item .artist { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <h3>VOD Music Sync</h3>
+    <div class="toggle-container">
+        <label for="enable-toggle">Enable Extension</label>
+        <label class="switch">
+            <input type="checkbox" id="enable-toggle"><span class="slider"></span>
+        </label>
+    </div>
+
+    <div id="current-song-container" style="display: none;">
+        <hr>
+        <p id="song-title">Song Title</p>
+        <p id="song-artist">Artist Name</p>
+        <button id="reopen-btn">Re-open Song</button>
+    </div>
+    
+    <button id="history-btn">View Song History</button>
+    <div id="song-history-container"></div>
+    
+    <hr style="margin-top:15px; margin-bottom: 5px;">
+    <button id="options-btn">Open Full Settings</button>
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-/vod-music-logger/
+
 
 /vod_music_logs/
 
@@ -18,3 +18,5 @@ __pycache__/
 *.zip
 
 test.py
+
+worker.js
