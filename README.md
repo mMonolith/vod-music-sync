@@ -1,5 +1,5 @@
-This project provides the tools needed for a streamer to automatically log the music they play on Spotify during a live stream.
-The generated log file can then be used by a companion browser extension to sync music for VOD watchers.
+This repo provides the tools needed for a streamer to automatically log the music they play on Spotify during a live stream.
+The generated log file can then be used by a browser extension to sync music for VOD watchers.
 
 Now also contains a working version of the browser extension and works best VODs on YouTube with no known desync issues.
 <img width="749" height="427" alt="image" src="https://github.com/user-attachments/assets/d56951a8-611e-487f-8112-d03c814823ea" />
