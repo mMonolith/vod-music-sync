@@ -40,7 +40,7 @@
             <input type="hidden" id="originalKey" value="">
             <label for="workerUrl">Worker URL</label>
             <input type="text" id="workerUrl" value="https://vod-sync.officilly-ranging-gamer.workers.dev" required>
-            <label for="vodName">VOD Name (Optional, e.g., "Lethal Company Shenanigans")</label>
+            <label for="vodName">VOD Name (Optional, e.g., "PEAK but Spotify Jams")</label>
             <input type="text" id="vodName" placeholder="A descriptive name for this VOD">
             
             <label for="logFile" id="logFileLabel">1. Select Merged VOD Log File (.json)</label>
@@ -78,32 +78,61 @@
     const logFileLabel = document.getElementById('logFileLabel');
     const logFileInput = document.getElementById('logFile');
     const originalKeyInput = document.getElementById('originalKey');
+    const logUrlInput = document.getElementById('logUrl');
+    const secretInput = document.getElementById('secret');
+
+    logFileInput.addEventListener('change', async () => {
+        const logFile = logFileInput.files[0];
+        if (!logFile) return;
+
+        const workerUrl = workerUrlInput.value.trim();
+        const secret = secretInput.value;
+
+        if (!secret) {
+            statusEl.textContent = 'Error: Admin Secret must be entered before uploading.';
+            logFileInput.value = '';
+            return;
+        }
+
+        statusEl.textContent = 'Uploading log file...';
+        logUrlInput.value = '';
+        logUrlInput.style.backgroundColor = '#eee';
+
+        try {
+            const fileContent = await logFile.text();
+            const uploadRes = await fetch(new URL('/upload', workerUrl).href, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
+                body: fileContent
+            });
+
+            if (!uploadRes.ok) throw new Error(`Upload failed: ${await uploadRes.text()}`);
+
+            const { logId } = await uploadRes.json();
+            const newLogUrl = new URL(`/logs/${logId}`, workerUrl).href;
+
+            logUrlInput.value = newLogUrl;
+            logUrlInput.style.backgroundColor = '#d4edda';
+            statusEl.textContent = 'Log file uploaded successfully! URL is ready.';
+        } catch (error) {
+            statusEl.textContent = `Error: ${error.message}`;
+            logUrlInput.style.backgroundColor = '#f8d7da';
+            logFileInput.value = '';
+        }
+    });
 
     vodForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         statusEl.textContent = 'Submitting...';
         const workerUrl = workerUrlInput.value.trim();
-        const logFile = logFileInput.files[0];
-        let logUrl = document.getElementById('logUrl').value.trim();
-        const secret = document.getElementById('secret').value;
+        const logUrl = logUrlInput.value.trim();
+        const secret = secretInput.value;
         const vodName = document.getElementById('vodName').value.trim();
         const twitchId = document.getElementById('twitchId').value.trim();
         const youtubeId = document.getElementById('youtubeId').value.trim();
         const originalKey = originalKeyInput.value;
 
         try {
-            if (logFile) {
-                statusEl.textContent = 'Uploading log file...';
-                const fileContent = await logFile.text();
-                const uploadRes = await fetch(new URL('/upload', workerUrl).href, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret }, body: fileContent
-                });
-                if (!uploadRes.ok) throw new Error(`Upload failed: ${await uploadRes.text()}`);
-                const { logId } = await uploadRes.json();
-                logUrl = new URL(`/logs/${logId}`, workerUrl).href;
-                document.getElementById('logUrl').value = logUrl;
-            }
-
             if (!logUrl) throw new Error("Log URL is required. Either upload a file or paste an existing URL.");
             if (!twitchId && !youtubeId) throw new Error("At least one VOD ID is required.");
             
@@ -123,6 +152,7 @@
                 headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': secret },
                 body: JSON.stringify({ twitchId, youtubeId, logUrl, vodName })
             });
+
             if (!submitRes.ok) throw new Error(`Linking failed: ${await submitRes.text()}`);
             
             statusEl.textContent = `Success! VOD link saved. Refreshing list...`;
@@ -138,6 +168,7 @@
         logFileLabel.textContent = "1. Select Merged VOD Log File (.json)";
         logFileInput.required = true;
         originalKeyInput.value = "";
+        logUrlInput.style.backgroundColor = '#eee';
         statusEl.textContent = "";
     }
 
@@ -167,7 +198,7 @@
             tableHTML += `<tr data-vod='${JSON.stringify(vod)}'>
                     <td>${vod.vodName || '<i>(No Name)</i>'}</td>
                     <td>${vod.key}</td>
-                    <td>${vod.logUrl || 'N/A'}</td>
+                    <td><a href="${vod.logUrl}" target="_blank" rel="noopener noreferrer">${vod.logUrl || 'N/A'}</a></td>
                     <td class="actions-cell">
                         <button class="btn-edit">Edit</button>
                         <button class="btn-delete">Delete</button>
@@ -203,7 +234,8 @@
         formTitle.textContent = `Editing: ${vodData.vodName || vodData.key}`;
         originalKeyInput.value = vodData.key;
         document.getElementById('vodName').value = vodData.vodName || '';
-        document.getElementById('logUrl').value = vodData.logUrl || '';
+        logUrlInput.value = vodData.logUrl || '';
+        logUrlInput.style.backgroundColor = '#eee';
         
         const [platform, id] = vodData.key.split(':');
         document.getElementById('twitchId').value = platform === 'twitch' ? id : '';
