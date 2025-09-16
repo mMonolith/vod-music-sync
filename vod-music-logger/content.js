@@ -1,223 +1,120 @@
 const currentUrl = new URL(window.location.href);
 const isMusicTab = currentUrl.searchParams.has('vod_sync_music_tab');
 const isTwitch = currentUrl.hostname.includes('twitch.tv');
+const isYouTube = currentUrl.hostname.includes('youtube.com');
 
-let videoElement;
-let lastTime = -1;
-let currentPlatform = '';
-let currentVodId = '';
-let observer;
-const NOTIFICATION_ID = 'vod-sync-inpage-notification';
-let lastIsPaused = false;
+let videoElement, lastTime = -1, currentPlatform = '', currentVodId = '', observer, lastIsPaused = false;
+let ytIframe;
 
-let notificationTimerInterval = null;
-let currentNotificationAnchor = null; 
-let isMouseOverNotification = false;
-let notificationHideTimeout = null;
-
-if (isMusicTab) {
-    console.log("VOD Sync [MUSIC TAB]: Initializing listener.");
-    
-    const findMusicVideo = setInterval(() => {
-        videoElement = document.querySelector('video.html5-main-video');
-        if (videoElement) {
-            clearInterval(findMusicVideo);
-            console.log("VOD Sync [MUSIC TAB]: Video element found.");
-        }
-    }, 500);
-
-    chrome.runtime.onMessage.addListener((request) => {
-        if (request.type === 'control_playback' && videoElement) {
-            switch(request.action) {
-                case 'play':
-                    if (request.seekTo !== undefined) {
-                        videoElement.currentTime = request.seekTo;
-                    }
-                    videoElement.play();
-                    break;
-                case 'pause':
-                    videoElement.pause();
-                    break;
-                case 'seek':
-                    if (request.seekTo !== undefined) {
-                        videoElement.currentTime = request.seekTo;
-                    }
-                    break;
-            }
-        }
-    });
-
-} else {
-    console.log("VOD Sync [VOD TAB]: Initializing updater.");
-    setInterval(vodTimeUpdater, 500);
+if (!isMusicTab) {
+    setInterval(vodTimeUpdater, 400);
     startObserver();
+    if (isYouTube) createYouTubeIframe();
 }
 
 chrome.runtime.onMessage.addListener((request) => {
     if (isMusicTab) return;
 
-    switch (request.type) {
-        case 'show_song_notification':
-            showOrUpdateInPageNotification(request.videoId, request.title, request.artist, request.anchor);
-            break;
-        case 'hide_song_notification':
-            hideInPageNotification();
-            break;
+    if (isYouTube) {
+        if (request.type === 'control_youtube_iframe') {
+            postMessageToYtIframe(request);
+        } else if (request.type === 'update_iframe_style') {
+            const iframeContainer = document.getElementById('vod-sync-iframe-container');
+            if (!iframeContainer) return;
+            if (request.opacity !== undefined) iframeContainer.style.opacity = request.opacity;
+            if (request.visible !== undefined) iframeContainer.style.display = request.visible ? 'block' : 'none';
+            if (request.volume !== undefined) postMessageToYtIframe({ action: 'setVolume', volume: request.volume });
+        }
     }
 });
 
-function updateTimerDisplay() {
-    if (!currentNotificationAnchor || !videoElement || !videoElement.isConnected) return;
-    
-    const timerEl = document.getElementById('vod-sync-timer');
-    if (!timerEl) {
-        hideInPageNotification();
-        return;
-    }
-    
-    const elapsedVodTimeSec = videoElement.currentTime - currentNotificationAnchor.vodTimeSec;
-    const progressSec = Math.floor((currentNotificationAnchor.positionMs / 1000) + elapsedVodTimeSec);
+async function createYouTubeIframe() {
+    if (document.getElementById('vod-sync-iframe-container')) return;
 
-    if (progressSec >= 0) {
-        const minutes = Math.floor(progressSec / 60).toString().padStart(2, '0');
-        const seconds = (progressSec % 60).toString().padStart(2, '0');
-        timerEl.textContent = `${minutes}:${seconds}`;
-    } else {
-        timerEl.textContent = `00:00`;
-    }
+    const { iframeOpacity, iframeVisible } = await chrome.storage.sync.get({ iframeOpacity: 1, iframeVisible: true });
+
+    const iframeContainer = document.createElement('div');
+    iframeContainer.id = 'vod-sync-iframe-container';
+    iframeContainer.style.cssText = `
+        position: fixed; bottom: 15px; left: 15px; width: 320px; height: 180px;
+        z-index: 2147483647; border-radius: 8px; overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.4); border: 2px solid #9147ff; background-color: #000;
+        opacity: ${iframeOpacity};
+        display: ${iframeVisible ? 'block' : 'none'};
+        transition: opacity 0.3s ease;
+    `;
+
+    const iframeSrc = `https://www.youtube.com/embed/?enablejsapi=1&origin=${window.location.origin}`;
+    const iframe = document.createElement('iframe');
+    iframe.id = 'vod-sync-iframe-player';
+    iframe.type = 'text/html';
+    iframe.width = '320';
+    iframe.height = '180';
+    iframe.src = iframeSrc;
+    iframe.frameBorder = '0';
+    iframe.allow = 'autoplay; encrypted-media';
+    
+    iframeContainer.appendChild(iframe);
+    document.body.appendChild(iframeContainer);
+    ytIframe = iframe;
 }
 
-function showOrUpdateInPageNotification(videoId, title, artist, anchor) {
-    if (!anchor) return;
-    
-    if (notificationHideTimeout) {
-        clearTimeout(notificationHideTimeout);
-        notificationHideTimeout = null;
-    }
-
-    currentNotificationAnchor = anchor;
-    
-    const existingNotification = document.getElementById(NOTIFICATION_ID);
-
-    if (!existingNotification) {
-        const container = document.createElement('div');
-        container.id = NOTIFICATION_ID;
-        container.style.cssText = `
-            position: fixed; bottom: 20px; left: 20px; z-index: 2147483647; background-color: #18181b; color: #efeff1; 
-            padding: 15px; border-radius: 8px; font-family: Roobert, "Helvetica Neue", Helvetica, Arial, sans-serif; 
-            font-size: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); border: 1px solid #4d4d53;
-            width: 320px; transform: translateX(-150%); transition: transform 0.4s ease-out;
-        `;
-        container.innerHTML = `
-            <p style="margin: 0 0 5px 0; font-size: 12px; color: #adadb8;">VOD Music Sync</p>
-            <p id="vod-sync-title" style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></p>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <p id="vod-sync-artist" style="margin: 0; font-size: 13px; color: #adadb8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></p>
-                <p id="vod-sync-timer" style="margin: 0; font-size: 13px; color: #efeff1; font-family: monospace;">00:00</p>
-            </div>
-            <button id="vod-sync-open-btn" style="width: 100%; padding: 10px; background-color: #9147ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;">Open Song</button>
-            <button id="vod-sync-close-btn" style="position: absolute; top: 8px; right: 8px; background: none; border: none; color: white; font-size: 20px; cursor: pointer; opacity: 0.7; line-height: 1;">&times;</button>
-        `;
-        document.body.appendChild(container);
-        setTimeout(() => { container.style.transform = 'translateX(0)'; }, 50);
-
-        container.querySelector('#vod-sync-open-btn').addEventListener('click', () => {
-            chrome.runtime.sendMessage({ type: 'open_music_tab', videoId: videoId });
-            hideInPageNotification();
-        });
-        container.querySelector('#vod-sync-close-btn').addEventListener('click', hideInPageNotification);
-        
-        container.addEventListener('mouseenter', () => {
-            isMouseOverNotification = true;
-            if (notificationHideTimeout) {
-                clearTimeout(notificationHideTimeout);
-                notificationHideTimeout = null;
+function postMessageToYtIframe(request) {
+    if (!ytIframe || !ytIframe.contentWindow) return;
+    let command;
+    switch (request.action) {
+        case 'play':
+            if (request.videoId) {
+                command = { event: 'command', func: 'loadVideoById', args: [{ videoId: request.videoId, startSeconds: request.seekTo || 0 }] };
+                setTimeout(() => postMessageToYtIframe({ action: 'setVolume', volume: request.volume }), 1200);
+            } else {
+                command = { event: 'command', func: 'playVideo', args: [] };
             }
-        });
-        container.addEventListener('mouseleave', () => {
-            isMouseOverNotification = false;
-        });
-        
-        if (notificationTimerInterval) clearInterval(notificationTimerInterval);
-        notificationTimerInterval = setInterval(updateTimerDisplay, 1000);
+            break;
+        case 'pause': command = { event: 'command', func: 'pauseVideo', args: [] }; break;
+        case 'stop': command = { event: 'command', func: 'stopVideo', args: [] }; break;
+        case 'seek': if (request.seekTo !== undefined) command = { event: 'command', func: 'seekTo', args: [request.seekTo, true] }; break;
+        case 'setVolume': if (request.volume !== undefined) command = { event: 'command', func: 'setVolume', args: [request.volume] }; break;
     }
-    
-    const titleEl = document.getElementById('vod-sync-title');
-    const artistEl = document.getElementById('vod-sync-artist');
-    if (titleEl) {
-        titleEl.textContent = title;
-        titleEl.title = title;
-    }
-    if (artistEl) {
-        artistEl.textContent = artist;
-        artistEl.title = artist;
-    }
-}
-
-function hideInPageNotification() {
-    if (notificationHideTimeout) clearTimeout(notificationHideTimeout);
-
-    notificationHideTimeout = setTimeout(() => {
-        if (isMouseOverNotification) {
-            return; 
-        }
-
-        if (notificationTimerInterval) {
-            clearInterval(notificationTimerInterval);
-            notificationTimerInterval = null;
-        }
-        currentNotificationAnchor = null;
-        const notification = document.getElementById(NOTIFICATION_ID);
-        if (notification) {
-            notification.remove();
-        }
-    }, 500);
+    if (command) ytIframe.contentWindow.postMessage(JSON.stringify(command), 'https://www.youtube.com');
 }
 
 function vodTimeUpdater() {
     if (!videoElement || !videoElement.isConnected) findVideoAndId();
     if (!currentVodId || !videoElement) return;
 
-    const currentTime = Math.floor(videoElement.currentTime);
+    const currentTime = videoElement.currentTime;
     const isPaused = videoElement.paused;
-    if (currentTime !== lastTime || isPaused !== lastIsPaused) {
+    const playbackRate = videoElement.playbackRate;
+
+    if (Math.abs(currentTime - lastTime) >= 0.5 || isPaused !== lastIsPaused) {
         lastTime = currentTime;
         lastIsPaused = isPaused;
         try {
-            chrome.runtime.sendMessage({ type: 'time_update', platform: currentPlatform, vodId: currentVodId, currentTime: currentTime, isPaused: isPaused });
-        } catch (e) {
-        }
-    }
-}
-
-function handleVideoElement(newVideoElement) {
-    if (videoElement === newVideoElement) return;
-    videoElement = newVideoElement;
-    if (videoElement) {
-        lastIsPaused = videoElement.paused;
+            chrome.runtime.sendMessage({
+                type: 'time_update', platform: currentPlatform, vodId: currentVodId,
+                currentTime, isPaused, playbackRate
+            });
+        } catch (e) { /* Extension context invalidated, safe to ignore */ }
     }
 }
 
 function findVideoAndId() {
-    const foundVideo = document.querySelector('video');
-    if (foundVideo !== videoElement) handleVideoElement(foundVideo);
+    const foundVideo = document.querySelector('video.html5-main-video');
+    if (foundVideo) videoElement = foundVideo;
+
     let platform = '', vodId = '';
-    if (videoElement) {
-        if (isTwitch) {
-            const match = currentUrl.pathname.match(/\/videos\/(\d+)/);
-            if (match && match[1]) { platform = 'twitch'; vodId = match[1]; }
-        } else {
-            vodId = currentUrl.searchParams.get('v');
-            if (vodId) { platform = 'youtube'; }
-        }
+    if (isYouTube) {
+        const params = new URLSearchParams(window.location.search);
+        const vParam = params.get('v');
+        if (vParam) { platform = 'youtube'; vodId = vParam; }
     }
-    currentPlatform = platform; 
+    currentPlatform = platform;
     currentVodId = vodId;
 }
 
 function startObserver() {
     findVideoAndId();
-    if (observer) observer.disconnect();
     observer = new MutationObserver(findVideoAndId);
     observer.observe(document.body, { childList: true, subtree: true });
 }

@@ -3,68 +3,58 @@
 <head>
     <title>VOD Sync Control</title>
     <style>
-        body { width: 300px; font-family: sans-serif; text-align: center; padding: 10px; }
-        h3 { margin-top: 0; }
-        button { width: 100%; padding: 10px; cursor: pointer; font-size: 14px; margin-top: 10px; border-radius: 4px; border: 1px solid transparent; }
-        .toggle-container { display: flex; align-items: center; justify-content: space-between; padding: 8px; background-color: #f0f0f0; border-radius: 6px; }
-        .toggle-container label { font-size: 14px; }
-        .switch { position: relative; display: inline-block; width: 40px; height: 24px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #9147ff; }
-        input:checked + .slider:before { transform: translateX(16px); }
+        body { width: 320px; font-family: sans-serif; padding: 10px 15px; color: #333; }
+        h3 { margin-top: 0; text-align: center; color: #9147ff; }
         hr { border: 0; border-top: 1px solid #ddd; margin: 15px 0; }
-        #current-song-container {
-            text-align: left; background-color: #f9f9f9; padding: 10px;
-            border-radius: 6px; border: 1px solid #eee;
-        }
-        #current-song-container p { margin: 0; }
-        #song-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #song-artist { font-size: 0.9em; color: #555; margin-bottom: 10px; }
-        #reopen-btn { background-color: #9147ff; color: white; font-weight: bold; }
-        #history-btn { background-color: #e0e0e0; color: #333; }
-        #song-history-container {
-            display: none;
-            max-height: 220px;
-            overflow-y: auto;
-            text-align: left;
-            border: 1px solid #eee;
-            border-radius: 6px;
-            margin-top: 10px;
-            padding: 5px;
-        }
-        .history-item {
-            padding: 8px;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        .history-item:last-child { border-bottom: none; }
-        .history-item p { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .history-item .title { font-weight: bold; }
-        .history-item .artist { font-size: 12px; color: #666; }
+        .control-group { margin-top: 15px; }
+        .control-group .label-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .control-group label { font-size: 14px; font-weight: 500; }
+        #offset-display { font-size: 13px; font-family: monospace; color: #555; background-color: #eee; padding: 2px 5px; border-radius: 4px;}
+        button { width: 100%; padding: 8px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background-color: #f0f0f0; font-weight: bold; }
+        button:hover { background-color: #e0e0e0; }
+        input[type="range"] { width: 100%; }
+        #song-list-title { margin-top: 15px; margin-bottom: 5px; font-weight: bold; text-align: center; }
+        #song-list-container { max-height: 150px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 5px; }
+        .song-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; }
+        .song-item:last-child { border-bottom: none; }
+        .song-info { flex: 1; min-width: 0; }
+        .song-info p { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-info .title { font-weight: bold; }
+        .song-info .artist { font-size: 12px; color: #666; }
+        .song-timestamp { font-family: monospace; font-size: 13px; color: #9147ff; font-weight: bold; padding-left: 10px;}
+        #status-message { text-align: center; color: #888; padding: 20px 10px; }
     </style>
 </head>
 <body>
     <h3>VOD Music Sync</h3>
-    <div class="toggle-container">
-        <label for="enable-toggle">Enable Extension</label>
-        <label class="switch">
-            <input type="checkbox" id="enable-toggle"><span class="slider"></span>
-        </label>
-    </div>
 
-    <div id="current-song-container" style="display: none;">
-        <hr>
-        <p id="song-title">Song Title</p>
-        <p id="song-artist">Artist Name</p>
-        <button id="reopen-btn">Re-open Song</button>
+    <div id="player-controls">
+        <div class="control-group">
+            <div class="label-container">
+                <label for="offset-slider">Sync Offset</label>
+                <span id="offset-display">-2000ms</span>
+            </div>
+            <input type="range" id="offset-slider" min="-2000" max="2000" step="100">
+        </div>
+        <div class="control-group">
+            <label for="opacity-slider">Player Transparency</label>
+            <input type="range" id="opacity-slider" min="0.1" max="1" step="0.05">
+        </div>
+        <div class="control-group">
+            <label for="volume-slider">Player Volume</label>
+            <input type="range" id="volume-slider" min="0" max="100" step="1">
+        </div>
+        <div class="control-group">
+            <button id="toggle-iframe-btn">Hide Player</button>
+        </div>
     </div>
     
-    <button id="history-btn">View Song History</button>
-    <div id="song-history-container"></div>
+    <hr>
+    <p id="song-list-title">Song History for this VOD</p>
+    <div id="song-list-container">
+        <p id="status-message">Loading song list...</p>
+    </div>
     
-    <hr style="margin-top:15px; margin-bottom: 5px;">
-    <button id="options-btn">Open Full Settings</button>
     <script src="popup.js"></script>
 </body>
 </html>
