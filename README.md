@@ -1,1 +1,3 @@
 This project provides the tools needed for a streamer to automatically log the music they play on Spotify during a live stream. The generated log file can then be used by a companion browser extension to sync music for VOD watchers.
+
+Now also contains a working version of the browser extension.
