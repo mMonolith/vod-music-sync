@@ -1,0 +1,17 @@
+Your privacy is important, this policy explains what data we use and why.
+Information We Process
+To provide its core functionality, the extension needs to send a limited amount of non-personal information to our secure server.
+VOD Information: When you visit a supported Twitch or YouTube VOD, the extension sends the VOD's unique identifier (e.g., 123456789) to our server. This is done solely to check for an associated music log file that enables the sync functionality.
+Song Information: If a music log is found for the VOD, the extension then sends non-personal song data (specifically, the song title, artist, and duration) to our server. This information is used to find the best-matching music video on YouTube to play during muted sections.
+Personally Identifiable Information (PII)
+We do not collect, store, or transmit any personally identifiable information. This includes, but is not limited to:
+Your user accounts (Twitch, YouTube, Google)
+Your browsing history
+Your IP address or location
+The extension's operations are anonymous and focused only on syncing music with VOD content.
+Locally Stored Data
+The extension uses your browser's local storage (chrome.storage) to save your personal settings, such as the sync timing offset and player volume. This data is stored only on your computer and is never transmitted to our server.
+Contact Us
+If you have any questions about this privacy policy, you can contact us via email or visit the project's official GitHub page.
+Email: officilly.ranging.gamer@gmail.com
+GitHub: https://github.com/mMonolith/vod-music-sync

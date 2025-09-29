@@ -5,14 +5,12 @@
     "description": "Syncs music with muted Twitch/YouTube VODs using YouTube.",
     "permissions": [
         "storage",
-        "scripting",
         "tabs",
         "alarms"
     ],
     "host_permissions": [
         "*://*.twitch.tv/*",
-        "*://*.youtube.com/*",
-        "*://*.googleapis.com/*"
+        "*://*.youtube.com/*"
     ],
     "background": {
         "service_worker": "background.js"
