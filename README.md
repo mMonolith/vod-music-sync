@@ -15,5 +15,5 @@ If music is desynced, refresh.
 
 <img width="357" height="186" alt="image" src="https://github.com/user-attachments/assets/03efc9c2-778c-4aae-bccc-b31030230cc7" />
 
-I'll pay to get the extension on the chrome web store before September ends.
+The extension is still under review for the Chrome Web Store.
 
