@@ -27,7 +27,7 @@ class SpotifyWatcherApp:
     def __init__(self, root):
         self.root = root
         self.root.title("VOD Sync Watcher")
-        self.root.geometry("400x250")
+        self.root.geometry("450x280")
         self.root.resizable(False, False)
         
         try:
@@ -39,29 +39,35 @@ class SpotifyWatcherApp:
         self.style.theme_use('clam')
         self.style.configure("TLabel", background="#2c2c2c", foreground="white", font=("Segoe UI", 10))
         self.style.configure("TFrame", background="#2c2c2c")
-        self.style.configure("TButton", font=("Segoe UI", 10, "bold"), foreground="white", background="#1DB954")
+        self.style.configure("TButton", font=("Segoe UI", 10, "bold"), foreground="white", background="#1DB954", padding=10)
         self.style.map("TButton", background=[('active', '#1ED760')])
+        self.style.configure("Secondary.TButton", background="#535353")
+        self.style.map("Secondary.TButton", background=[('active', '#6e6e6e')])
         
-        self.main_frame = ttk.Frame(root, padding="15")
+        self.main_frame = ttk.Frame(root, padding="20")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         self.root.configure(background="#2c2c2c")
 
         self.title_label = ttk.Label(self.main_frame, text="VOD Music Sync Watcher", font=("Segoe UI", 14, "bold"))
-        self.title_label.pack(pady=(0, 10))
+        self.title_label.pack(pady=(0, 15))
         
-        self.status_label = ttk.Label(self.main_frame, text="Initializing...", wraplength=370, justify=tk.CENTER)
+        self.status_label = ttk.Label(self.main_frame, text="Initializing...", wraplength=410, justify=tk.CENTER)
         self.status_label.pack(pady=5)
         
-        self.song_label = ttk.Label(self.main_frame, text="Not Playing", wraplength=370, justify=tk.CENTER, font=("Segoe UI", 9, "italic"))
+        self.song_label = ttk.Label(self.main_frame, text="Not Playing", wraplength=410, justify=tk.CENTER, font=("Segoe UI", 9, "italic"))
         self.song_label.pack(pady=5)
 
         self.auth_frame = ttk.Frame(self.main_frame)
-        self.url_entry = ttk.Entry(self.auth_frame, width=40)
-        self.submit_button = ttk.Button(self.auth_frame, text="Submit", command=self.submit_auth_code)
+        self.auth_button = ttk.Button(self.auth_frame, text="Open Spotify Login", command=self.open_auth_url)
+        self.url_label = ttk.Label(self.auth_frame, text="Paste the redirect URL below:", font=("Segoe UI", 9))
+        self.url_entry = ttk.Entry(self.auth_frame, width=50)
+        self.submit_button = ttk.Button(self.auth_frame, text="Submit", command=self.submit_auth_code, style="TButton")
         
         self.sp = None
         self.auth_manager = None
+        self.auth_url = None
         self.stop_event = threading.Event()
+        self.is_authenticated = False
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
@@ -73,15 +79,26 @@ class SpotifyWatcherApp:
         self.song_label.config(text=song or " ")
 
     def show_auth_ui(self, auth_url):
-        self.update_status("Authentication required. Click the button, log in, and paste the final URL below.")
+        self.auth_url = auth_url
+        self.update_status("Authentication required to access Spotify.", "")
         
-        auth_button = ttk.Button(self.main_frame, text="1. Open Spotify Login", command=lambda: webbrowser.open(auth_url))
-        auth_button.pack(pady=5, fill=tk.X)
+        for widget in self.auth_frame.winfo_children():
+            widget.pack_forget()
         
-        self.auth_frame.pack(pady=10)
-        ttk.Label(self.auth_frame, text="2. Paste URL here:").pack(side=tk.LEFT, padx=(0, 5))
-        self.url_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
-        self.submit_button.pack(side=tk.LEFT, padx=(5, 0))
+        self.auth_button.pack(pady=(10, 15), fill=tk.X)
+        self.url_label.pack(pady=(0, 5))
+        self.url_entry.pack(pady=(0, 10), fill=tk.X)
+        self.submit_button.pack(pady=(0, 10), fill=tk.X)
+        
+        self.auth_frame.pack(pady=10, fill=tk.BOTH)
+
+    def hide_auth_ui(self):
+        self.auth_frame.pack_forget()
+        self.auth_url = None
+
+    def open_auth_url(self):
+        if self.auth_url:
+            webbrowser.open(self.auth_url)
 
     def submit_auth_code(self):
         redirected_url = self.url_entry.get().strip()
@@ -90,14 +107,21 @@ class SpotifyWatcherApp:
             return
 
         try:
-            self.update_status("Authenticating...")
+            self.update_status("Authenticating, please wait...")
             code = self.auth_manager.parse_response_code(redirected_url)
             self.auth_manager.get_access_token(code, check_cache=False)
             self.sp = spotipy.Spotify(auth_manager=self.auth_manager)
-            self.auth_frame.pack_forget()
+            
+            self.is_authenticated = True
+            self.hide_auth_ui()
+            self.update_status("Authentication successful!", "")
+            
+            self.url_entry.delete(0, tk.END)
+            
         except Exception as e:
-            messagebox.showerror("Authentication Failed", f"Could not get token. Please check the URL and try again.\n\nDetails: {e}")
+            messagebox.showerror("Authentication Failed", f"Could not authenticate. Please check the URL and try again.\n\nDetails: {e}")
             self.update_status("Authentication failed. Please try again.")
+            self.is_authenticated = False
 
     def run_watcher(self):
         self.auth_manager = SpotifyPKCE(client_id=CLIENT_ID, redirect_uri=REDIRECT_URI, scope=SCOPE, cache_path=CACHE_PATH, open_browser=False)
@@ -108,10 +132,14 @@ class SpotifyWatcherApp:
             self.root.after(0, self.show_auth_ui, auth_url)
             
             while not self.auth_manager.get_cached_token():
-                if self.stop_event.is_set(): return
+                if self.stop_event.is_set(): 
+                    return
                 time.sleep(0.5)
+        else:
+            self.is_authenticated = True
 
         self.sp = spotipy.Spotify(auth_manager=self.auth_manager)
+        self.root.after(0, self.hide_auth_ui)
         self.root.after(0, self.update_status, "Watcher is running...", "Waiting for Spotify...")
 
         last_data_str = ""
