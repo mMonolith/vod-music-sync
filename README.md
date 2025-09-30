@@ -11,9 +11,9 @@ The iframe can be hidden or made transparent.
 
 
 When watching twitch.tv VODs, avoid dragging around or placing the YouTube pop-up window/tab.
-If music is desynced, refresh.
+If music is desynced, refresh VOD.
 
 <img width="357" height="186" alt="image" src="https://github.com/user-attachments/assets/03efc9c2-778c-4aae-bccc-b31030230cc7" />
 
-The extension is still under review for the Chrome Web Store.
+The extension is on Chrome Web Store https://chromewebstore.google.com/detail/lnhdkdaanfapchcbilmjjflmhekpjadf
 
